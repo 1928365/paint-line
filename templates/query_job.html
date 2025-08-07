@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工單查詢</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <a class="navbar-brand" href="#">噴漆生產排程系統</a>
+        <div class="collapse navbar-collapse">
+            <ul class="navbar-nav ml-auto">
+                <li class="nav-item">
+                    <span class="navbar-text">歡迎, {{ current_user_name }}</span>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('logout') }}">登出</a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="alert alert-info">{{ messages[0] }}</div>
+            {% endif %}
+        {% endwith %}
+
+        <h2 class="mb-3">工單查詢</h2>
+        <form action="{{ url_for('query_job') }}" method="post" class="form-inline mb-4">
+            <div class="form-group mr-2">
+                <label for="work_order" class="sr-only">工單號碼</label>
+                <input type="text" class="form-control" id="work_order" name="work_order" placeholder="輸入工單號碼" required>
+            </div>
+            <button type="submit" class="btn btn-primary">查詢</button>
+        </form>
+
+        {% if jobs %}
+        <table class="table table-bordered table-striped">
+            <thead class="thead-dark">
+                <tr>
+                    <th>工單號碼</th>
+                    <th>機型</th>
+                    <th>零件名稱</th>
+                    <th>入料日期</th>
+                    <th>需求日期</th>
+                    <th>噴漆日期</th>
+                    <th>優先級</th>
+                    <th>狀態</th>
+                    <th>備註</th>
+                    <th>建立人員</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for job in jobs %}
+                <tr>
+                    <td>{{ job.work_order }}</td>
+                    <td>{{ job.model_name or '' }}</td>
+                    <td>{{ job.part_name }}</td>
+                    <td>{{ job.material_arrival_date or '' }}</td>
+                    <td>{{ job.request_date or '' }}</td>
+                    <td>{{ job.painting_date or '' }}</td>
+                    <td>{{ job.priority }}</td>
+                    <td>{{ job.status }}</td>
+                    <td>{{ job.notes or '' }}</td>
+                    <td>{{ job.creator_name or '' }}</td>
+                    <td>
+                        <button type="button" class="btn btn-sm btn-warning" data-toggle="modal" data-target="#editModal{{ job.id }}">編輯</button>
+                        <button type="button" class="btn btn-sm btn-info" data-toggle="modal" data-target="#scheduleModal{{ job.id }}">排程</button>
+                        <button type="button" class="btn btn-sm btn-success" data-toggle="modal" data-target="#statusModal{{ job.id }}">更新狀態</button>
+                        <button type="button" class="btn btn-sm btn-danger" data-toggle="modal" data-target="#deleteModal{{ job.id }}">刪除</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% elif request.method == 'POST' %}
+        <p>沒有找到符合條件的工單。</p>
+        {% endif %}
+
+        <div class="mt-4">
+            <a href="/" class="btn btn-secondary">回首頁</a>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+    <script>
+        $(function() {
+            $("#work_order").autocomplete({
+                source: function(request, response) {
+                    $.ajax({
+                        url: "{{ url_for('autocomplete_work_orders') }}",
+                        data: { term: request.term },
+                        dataType: "json",
+                        success: function(data) {
+                            response(data);
+                        }
+                    });
+                },
+                minLength: 1 // 最少輸入一個字元才開始查詢
+            });
+        });
+    </script>
+
+    <!-- Edit Modals -->
+    {% for job in jobs %}
+    <div class="modal fade" id="editModal{{ job.id }}" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form action="{{ url_for('edit_job', job_id=job.id) }}" method="post">
+                    <div class="modal-header">
+                        <h5 class="modal-title">編輯工單: {{ job.work_order }}</h5>
+                        <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label>工單號碼</label>
+                            <input type="text" name="work_order" class="form-control" value="{{ job.work_order }}" required>
+                        </div>
+                        <div class="form-group">
+                            <label>機型</label>
+                            <input type="text" name="model_name" class="form-control" value="{{ job.model_name or '' }}">
+                        </div>
+                        <div class="form-group">
+                            <label>零件名稱</label>
+                            <select name="part_name" class="form-control" required>
+                                <option value="鑄件" {% if job.part_name == '鑄件' %}selected{% endif %}>鑄件</option>
+                                <option value="前段板金" {% if job.part_name == '前段板金' %}selected{% endif %}>前段板金</option>
+                                <option value="全罩板金" {% if job.part_name == '全罩板金' %}selected{% endif %}>全罩板金</option>
+                                <option value="電裝板金" {% if job.part_name == '電裝板金' %}selected{% endif %}>電裝板金</option>
+                                <option value="機頭板金" {% if job.part_name == '機頭板金' %}selected{% endif %}>機頭板金</option>
+                                <option value="出貨補漆" {% if job.part_name == '出貨補漆' %}selected{% endif %}>出貨補漆</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>客戶</label>
+                            <input type="text" name="customer" class="form-control" value="{{ job.customer }}">
+                        </div>
+                        <div class="form-group">
+                            <label>優先級</label>
+                            <select name="priority" class="form-control">
+                                <option value="高" {% if job.priority == '高' %}selected{% endif %}>高</option>
+                                <option value="中" {% if job.priority == '中' %}selected{% endif %}>中</option>
+                                <option value="低" {% if job.priority == '低' %}selected{% endif %}>低</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary">儲存變更</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Schedule Modals -->
+    {% for job in jobs %}
+    <div class="modal fade" id="scheduleModal{{ job.id }}" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form action="{{ url_for('schedule_job', job_id=job.id) }}" method="post">
+                    <div class="modal-header">
+                        <h5 class="modal-title">排程工單: {{ job.work_order }}</h5>
+                        <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label>入料日期</label>
+                            <input type="date" name="material_arrival_date" class="form-control" value="{{ job.material_arrival_date }}">
+                        </div>
+                        <div class="form-group">
+                            <label>需求日期</label>
+                            <input type="date" name="request_date" class="form-control" value="{{ job.request_date }}">
+                        </div>
+                        <div class="form-group">
+                            <label>噴漆日期</label>
+                            <input type="date" name="painting_date" class="form-control" value="{{ job.painting_date }}">
+                        </div>
+                        <div class="form-group">
+                            <label>備註</label>
+                            <textarea name="notes" class="form-control">{{ job.notes or '' }}</textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary">儲存排程</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Status Modals -->
+    {% for job in jobs %}
+    <div class="modal fade" id="statusModal{{ job.id }}" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form action="{{ url_for('update_status', job_id=job.id) }}" method="post">
+                    <div class="modal-header">
+                        <h5 class="modal-title">更新狀態: {{ job.work_order }}</h5>
+                        <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label>狀態</label>
+                            <select name="status" class="form-control">
+                                <option value="待排程" {% if job.status == '待排程' %}selected{% endif %}>待排程</option>
+                                <option value="已排程" {% if job.status == '已排程' %}selected{% endif %}>已排程</option>
+                                <option value="已完成" {% if job.status == '已完成' %}selected{% endif %}>已完成</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary">更新</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Delete Modals -->
+    {% for job in jobs %}
+    <div class="modal fade" id="deleteModal{{ job.id }}" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form action="{{ url_for('delete_job', job_id=job.id) }}" method="post">
+                    <div class="modal-header">
+                        <h5 class="modal-title">確認刪除</h5>
+                        <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <p>您確定要刪除工單 "{{ job.work_order }}" 嗎？此操作無法復原。</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-danger">確認刪除</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</body>
+</html>
